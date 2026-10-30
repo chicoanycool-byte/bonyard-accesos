@@ -1,0 +1,9 @@
+{
+  "name": "Bitácora de Accesos Bonyard",
+  "short_name": "Accesos",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#f2f4f7",
+  "theme_color": "#0f3d5e"
+}
