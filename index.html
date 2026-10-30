@@ -111,6 +111,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
     <p><b>Bonyard Servicios SC</b> va a tomar una fotografía de tu rostro y de tu identificación oficial, y registrará tu nombre, la persona que visitas y tus horarios de entrada y salida.</p><br>
     <p>Usamos estos datos únicamente para controlar el acceso y la seguridad de nuestras instalaciones. No se comparten con terceros salvo requerimiento de autoridad.</p><br>
     <p>La fotografía de tu rostro se compara con la de tu identificación para confirmar que eres tú. Si no estás de acuerdo, acude con el personal de recepción para registrarte de otra forma.</p><br>
+    <p>Para que en tus siguientes visitas no tengas que mostrar tu identificación, guardamos una huella facial (una serie de números que describe tu rostro, no una fotografía). Puedes pedir que la borremos en cualquier momento en recepción.</p><br>
     <p>Puedes consultar el aviso de privacidad integral y ejercer tus derechos ARCO solicitándolo en recepción.</p>
   </div>
   <div class="fila">
@@ -132,6 +133,20 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
   </div>
 </section>
 
+<!-- 4b. RECONOCIDO -->
+<section class="pantalla" id="p-reconocido">
+  <button class="volver" onclick="ir('p-privacidad')">‹ Atrás</button>
+  <div class="resultado azulFondo">
+    <img id="recFoto" alt="" style="width:170px;height:170px;object-fit:cover;border-radius:50%;border:4px solid rgba(255,255,255,.7);transform:scaleX(-1)">
+    <h1 id="recNombre"></h1>
+    <p>¿Eres tú?</p>
+  </div>
+  <div class="fila">
+    <button class="btn sec" onclick="noSoyYo()">No soy yo</button>
+    <button class="btn verde chico" onclick="siSoyYo()">Sí, soy yo</button>
+  </div>
+</section>
+
 <!-- 5. CONFIRMAR NOMBRE -->
 <section class="pantalla" id="p-nombre">
   <button class="volver" onclick="ir('p-privacidad')">‹ Atrás</button>
@@ -144,7 +159,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 6. ANFITRIÓN -->
 <section class="pantalla" id="p-anfitrion">
-  <button class="volver" onclick="ir('p-nombre')">‹ Atrás</button>
+  <button class="volver" onclick="atrasDatos()">‹ Atrás</button>
   <h2>¿A quién visitas?</h2>
   <input type="search" id="buscar" placeholder="Buscar por nombre o puesto" class="normal" oninput="pintarAnfitriones()">
   <div class="lista" id="listaAnf"></div>
@@ -153,7 +168,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 6b. TRANSPORTE -->
 <section class="pantalla" id="p-transporte">
-  <button class="volver" onclick="ir('p-nombre')">‹ Atrás</button>
+  <button class="volver" onclick="atrasDatos()">‹ Atrás</button>
   <h2>Datos del transporte</h2>
   <label class="l">Línea de transporte</label>
   <input type="text" id="linea" autocomplete="off" autocapitalize="characters" placeholder="Ej. TRANSPORTES GARCÍA" oninput="pintarClientes()">
@@ -559,6 +574,28 @@ async function capturarIdentificacion(conRostro = true){
   } finally { btn.style.display = 'none'; }
 }
 
+/* ================== RECONOCIMIENTO DE VISITANTES ================== */
+const UMBRAL_REC = 0.45;   // más estricto que contra la identificación, porque aquí no hay credencial
+let visitantes = [];
+async function cargarVisitantes(){ try { visitantes = (await api('visitantes')).lista || []; } catch(e){} }
+function reconocer(descs){
+  let mejor = null;
+  for (const v of visitantes){
+    const d = Math.min(...descs.map(a => faceapi.euclideanDistance(a, v.d)));
+    if (!mejor || d < mejor.d) mejor = {v, d};
+  }
+  return mejor && mejor.d <= UMBRAL_REC ? mejor : null;
+}
+function promedio(descs){
+  if (!descs || !descs.length) return null;
+  const n = descs[0].length, r = new Array(n).fill(0);
+  descs.forEach(d => { for (let i = 0; i < n; i++) r[i] += d[i] / descs.length; });
+  return r.map(x => Math.round(x * 10000) / 10000);
+}
+function siSoyYo(){ S.nombre = S.visitante.nombre; S.fotoId = ''; abrirAnfitriones(); }
+function noSoyYo(){ S.visitante = null; S.forzarId = true; pasoRostro(); }
+function atrasDatos(){ ir(S.visitante ? 'p-reconocido' : 'p-nombre'); }
+
 /* ================== FLUJO DE INGRESO ================== */
 function iniciarIngreso(){ S = {modo:'ingreso'}; ir('p-tipo'); }
 function elegirTipo(t){ S.tipo = t; ir('p-privacidad'); }
@@ -566,9 +603,24 @@ function elegirTipo(t){ S.tipo = t; ir('p-privacidad'); }
 async function pasoRostro(){
   try {
     ir('p-camara'); $('camAviso').textContent = 'Preparando cámara…';
-    await Promise.all([prenderCamara(), cargarModelos()]);
+    await Promise.all([prenderCamara(), cargarModelos(), cargarVisitantes()]);
     const rostro = await capturarRostro();
     S.fotoRostro = rostro.foto; S.descRostro = rostro.descriptor;
+    S.descsVivo = rostro.descs && rostro.descs.length ? rostro.descs : [rostro.descriptor];
+
+    // ¿Ya se registró antes? Lo reconocemos por su rostro y no le pedimos identificación
+    if (!S.forzarId){
+      const rec = reconocer(S.descsVivo);
+      if (rec){
+        apagarCamara();
+        S.visitante = rec.v; S.distancia = rec.d;
+        $('recFoto').src = S.fotoRostro;
+        $('recNombre').textContent = rec.v.nombre;
+        ir('p-reconocido');
+        return;
+      }
+    }
+    S.visitante = null;
 
     $('camAviso').textContent = '¡Listo! Ahora tu identificación';
     await pausa(1200);
@@ -663,6 +715,7 @@ async function registrarIngreso(){
   try {
     const r = await api('ingreso', {
       tipo: S.tipo, nombre: S.nombre, anfitrionId: S.anfitrionId, clienteId: S.clienteId, linea: $('linea').value.trim(),
+      visitanteId: S.visitante ? S.visitante.id : null, huella: S.visitante ? null : promedio(S.descsVivo),
       distancia: S.distancia, fotoRostro: S.fotoRostro, fotoId: S.fotoId
     });
     cargando(false);
@@ -679,13 +732,29 @@ async function iniciarSalida(){
   S = {modo:'salida'};
   try {
     ir('p-camara'); $('camAviso').textContent = 'Preparando cámara…';
-    await Promise.all([prenderCamara(), cargarModelos()]);
-    const id = await capturarIdentificacion(false);
-    S.fotoId = id.foto;
-    apagarCamara();
-    cargando(true, 'Buscando tu registro…');
-    const r = await api('salida_buscar', {imagen: id.ocr || S.fotoId});
-    cargando(false);
+    await Promise.all([prenderCamara(), cargarModelos(), cargarVisitantes()]);
+    let r = null;
+    // Primero intentamos reconocerlo por su rostro
+    const rostro = await capturarRostro('Mira a la cámara para registrar tu salida');
+    const rec = reconocer(rostro.descs && rostro.descs.length ? rostro.descs : [rostro.descriptor]);
+    if (rec){
+      S.fotoId = rostro.foto;
+      apagarCamara();
+      cargando(true, 'Buscando tu registro…');
+      r = await api('salida_buscar', {nombre: rec.v.nombre});
+      cargando(false);
+      if (r.coincidencias.length === 1){ S.folio = r.coincidencias[0].folio; return registrarSalida(); }
+    } else {
+      // No lo reconocimos: usamos su identificación
+      $('camAviso').textContent = 'No te reconocimos. Ahora tu identificación';
+      await pausa(1200);
+      const id = await capturarIdentificacion(false);
+      S.fotoId = id.foto;
+      apagarCamara();
+      cargando(true, 'Buscando tu registro…');
+      r = await api('salida_buscar', {imagen: id.ocr || S.fotoId});
+      cargando(false);
+    }
     const lista = r.coincidencias.length ? r.coincidencias : r.todos;
     if (!lista.length) return resultado('rojoFondo','⚠','Sin registro de entrada','No encontramos visitas abiertas. Acude con vigilancia.', 8000);
     S.folio = r.coincidencias.length === 1 ? r.coincidencias[0].folio : null;
