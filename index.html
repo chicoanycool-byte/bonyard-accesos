@@ -151,6 +151,18 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
   <button class="btn verde chico" id="btnRegistrar" onclick="registrarIngreso()" disabled style="opacity:.5">Registrar entrada</button>
 </section>
 
+<!-- 6b. TRANSPORTE -->
+<section class="pantalla" id="p-transporte">
+  <button class="volver" onclick="ir('p-nombre')">‹ Atrás</button>
+  <h2>Datos del transporte</h2>
+  <label class="l">Línea de transporte</label>
+  <input type="text" id="linea" autocomplete="off" autocapitalize="characters" placeholder="Ej. TRANSPORTES GARCÍA" oninput="pintarClientes()">
+  <label class="l">Cliente de carga</label>
+  <input type="search" id="buscarCli" placeholder="Buscar cliente" class="normal" oninput="pintarClientes()">
+  <div class="lista" id="listaCli"></div>
+  <button class="btn verde chico" id="btnRegistrarT" onclick="registrarIngreso()" disabled style="opacity:.5">Registrar entrada</button>
+</section>
+
 <!-- 7. SALIDA: ELEGIR REGISTRO -->
 <section class="pantalla" id="p-salidaLista">
   <button class="volver" onclick="inicio()">‹ Atrás</button>
@@ -196,7 +208,7 @@ const cfg = {
   get umbral(){ return parseFloat(localStorage.getItem('by_umbral') || '0.60') }
 };
 let S = {};            // datos del registro en curso
-let anfitriones = [];
+let anfitriones = [], clientes = [];
 let stream = null, loop = null, modelosListos = null, timerInicio = null;
 
 /* ================== NAVEGACIÓN ================== */
@@ -560,11 +572,18 @@ function confirmarNombre(){
 async function abrirAnfitriones(){
   cargando(true, 'Cargando directorio…');
   try {
-    anfitriones = (await api('anfitriones')).lista;
-    S.anfitrionId = null;
-    $('buscar').value = '';
-    pintarAnfitriones();
-    ir('p-anfitrion');
+    const cat = await api('catalogos');
+    anfitriones = cat.lista; clientes = cat.clientes || [];
+    S.anfitrionId = null; S.clienteId = null;
+    if (S.tipo === 'Transporte'){
+      $('linea').value = ''; $('buscarCli').value = '';
+      pintarClientes();
+      ir('p-transporte');
+    } else {
+      $('buscar').value = '';
+      pintarAnfitriones();
+      ir('p-anfitrion');
+    }
   } catch(e){ resultado('rojoFondo','⚠','Sin conexión', e.message, 8000); }
   cargando(false);
 }
@@ -580,17 +599,28 @@ function pintarAnfitriones(){
 }
 function elegirAnfitrion(id){ S.anfitrionId = id; pintarAnfitriones(); }
 
+function pintarClientes(){
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const q = norm($('buscarCli').value.trim());
+  const lista = clientes.filter(c => !q || norm(c.nombre).includes(q));
+  $('listaCli').innerHTML = lista.map(c =>
+    `<div class="item ${c.id===S.clienteId?'sel':''}" onclick="S.clienteId=${c.id};pintarClientes()"><b>${esc(c.nombre)}</b></div>`
+  ).join('') || '<p class="sub">Sin resultados</p>';
+  const listo = S.clienteId && $('linea').value.trim().length >= 2;
+  const b = $('btnRegistrarT'); b.disabled = !listo; b.style.opacity = listo ? 1 : .5;
+}
+
 async function registrarIngreso(){
-  if (!S.anfitrionId) return;
+  if (S.tipo === 'Transporte' ? !(S.clienteId && $('linea').value.trim()) : !S.anfitrionId) return;
   cargando(true, 'Registrando tu entrada…');
   try {
     const r = await api('ingreso', {
-      tipo: S.tipo, nombre: S.nombre, anfitrionId: S.anfitrionId,
+      tipo: S.tipo, nombre: S.nombre, anfitrionId: S.anfitrionId, clienteId: S.clienteId, linea: $('linea').value.trim(),
       distancia: S.distancia, fotoRostro: S.fotoRostro, fotoId: S.fotoId
     });
     cargando(false);
     resultado('verdeFondo', '✓', 'Acceso permitido',
-      `Bienvenido, <b>${esc(primerNombre(S.nombre))}</b>.<br>Ya avisamos a ${esc(r.anfitrion)} que llegaste.<br><br><small>Folio ${esc(r.folio)}</small>`, 7000);
+      `Bienvenido, <b>${esc(primerNombre(S.nombre))}</b>.<br>${r.anfitrion ? 'Ya avisamos a ' + esc(r.anfitrion) + ' que llegaste.' : 'Ya avisamos de tu llegada para ' + esc(r.cliente) + '.'}<br><br><small>Folio ${esc(r.folio)}</small>`, 7000);
   } catch(e){
     cargando(false);
     resultado('rojoFondo','⚠','No se pudo registrar', e.message, 8000);
