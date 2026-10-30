@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Bitácora de Accesos</title>
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
 <style>
@@ -85,11 +87,12 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
     <button class="btn verde" onclick="iniciarIngreso()"><span class="ico">➜</span>INGRESO</button>
     <button class="btn naranja" onclick="iniciarSalida()"><span class="ico">⇠</span>SALIDA</button>
   </div>
+  <button class="btn sec" id="btnInstalar" style="display:none" onclick="instalar()">Instalar como aplicación</button>
 </section>
 
 <!-- 2. TIPO -->
 <section class="pantalla" id="p-tipo">
-  <button class="volver" onclick="inicio()">‹ Regresar</button>
+  <button class="volver" onclick="inicio()">‹ Atrás</button>
   <h1>¿Quién nos visita?</h1>
   <div class="grid g4">
     <button class="btn" onclick="elegirTipo('Cliente')"><span class="ico">🤝</span>Cliente</button>
@@ -101,7 +104,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 3. AVISO DE PRIVACIDAD -->
 <section class="pantalla" id="p-privacidad">
-  <button class="volver" onclick="ir('p-tipo')">‹ Regresar</button>
+  <button class="volver" onclick="ir('p-tipo')">‹ Atrás</button>
   <h2>Antes de continuar</h2>
   <div class="privacidad">
     <p><b>Aviso de privacidad simplificado</b></p><br>
@@ -118,7 +121,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 4. CÁMARA -->
 <section class="pantalla" id="p-camara">
-  <button class="volver" onclick="cancelarCamara()">‹ Cancelar</button>
+  <button class="volver" onclick="cancelarCamara()">‹ Atrás</button>
   <h2 id="camTitulo">Mira a la cámara</h2>
   <div class="barra"><i id="camBarra"></i></div>
   <div class="camara">
@@ -131,6 +134,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 5. CONFIRMAR NOMBRE -->
 <section class="pantalla" id="p-nombre">
+  <button class="volver" onclick="ir('p-privacidad')">‹ Atrás</button>
   <h2>Confirma tu nombre</h2>
   <p class="sub">Lo leímos de tu identificación. Corrígelo si hace falta.</p>
   <input type="text" id="nombre" autocomplete="off" autocapitalize="characters">
@@ -140,6 +144,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 6. ANFITRIÓN -->
 <section class="pantalla" id="p-anfitrion">
+  <button class="volver" onclick="ir('p-nombre')">‹ Atrás</button>
   <h2>¿A quién visitas?</h2>
   <input type="search" id="buscar" placeholder="Buscar por nombre o puesto" class="normal" oninput="pintarAnfitriones()">
   <div class="lista" id="listaAnf"></div>
@@ -148,7 +153,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 
 <!-- 7. SALIDA: ELEGIR REGISTRO -->
 <section class="pantalla" id="p-salidaLista">
-  <button class="volver" onclick="inicio()">‹ Cancelar</button>
+  <button class="volver" onclick="inicio()">‹ Atrás</button>
   <h2 id="salTitulo">Confirma tu registro</h2>
   <p class="sub" id="salSub"></p>
   <div class="lista" id="listaSal"></div>
@@ -278,7 +283,10 @@ function apagarCamara(){
   cancelAnimationFrame(loop); loop = null;
   if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
 }
-function cancelarCamara(){ inicio(); }
+function cancelarCamara(){
+  if (S.modo === 'ingreso'){ apagarCamara(); ir('p-privacidad'); }
+  else inicio();
+}
 
 // Captura el cuadro actual sin efecto espejo, reducido para enviarlo
 function capturar(maxLado = 1280){
@@ -650,6 +658,18 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 async function despierto(){ try { await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') despierto(); });
 despierto();
+// Instalación como aplicación
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let promptInstalar = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptInstalar = e; $('btnInstalar').style.display = 'flex'; });
+window.addEventListener('appinstalled', () => { $('btnInstalar').style.display = 'none'; });
+async function instalar(){
+  if (!promptInstalar) return;
+  promptInstalar.prompt();
+  await promptInstalar.userChoice;
+  promptInstalar = null;
+  $('btnInstalar').style.display = 'none';
+}
 // Liga de instalación: index.html#u=URL&t=TOKEN guarda la configuración y limpia la dirección
 (function(){
   const h = new URLSearchParams(location.hash.slice(1));
