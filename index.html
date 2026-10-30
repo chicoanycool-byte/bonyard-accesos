@@ -88,6 +88,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
     <button class="btn naranja" onclick="iniciarSalida()"><span class="ico">⇠</span>SALIDA</button>
   </div>
   <button class="btn sec" id="btnInstalar" style="display:none" onclick="instalar()">Instalar como aplicación</button>
+  <p class="nota" id="version" style="text-align:center"></p>
 </section>
 
 <!-- 2. TIPO -->
@@ -151,7 +152,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 <section class="pantalla" id="p-nombre">
   <button class="volver" onclick="ir('p-privacidad')">‹ Atrás</button>
   <h2>Confirma tu nombre</h2>
-  <p class="sub">Lo leímos de tu identificación. Corrígelo si hace falta.</p>
+  <p class="sub">Lo leímos de tu identificación. Revísalo bien: con este nombre te vamos a reconocer en tus siguientes visitas.</p>
   <input type="text" id="nombre" autocomplete="off" autocapitalize="characters">
   <div style="flex:1"></div>
   <button class="btn verde chico" onclick="confirmarNombre()">Continuar</button>
@@ -215,6 +216,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
 <script>
 /* ================== ESTADO Y CONFIG ================== */
 const MODELOS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+const VERSION = '2026.10.30-8';
 const $ = id => document.getElementById(id);
 const cfg = {
   get url(){ return localStorage.getItem('by_url') || '' },
@@ -804,6 +806,20 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 async function despierto(){ try { await navigator.wakeLock.request('screen'); } catch(e){} }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') despierto(); });
 despierto();
+// Actualización automática: si hay versión nueva publicada, la app se recarga sola estando en el inicio
+$('version').textContent = 'Versión ' + VERSION;
+async function revisarVersion(){
+  try {
+    if (!$('p-inicio').classList.contains('activa')) return;
+    const t = await (await fetch('index.html?v=' + Date.now(), {cache:'no-store'})).text();
+    const m = t.match(/const VERSION = '([^']+)'/);
+    if (m && m[1] !== VERSION) location.reload();
+  } catch(e){}
+}
+setInterval(revisarVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') revisarVersion(); });
+setTimeout(revisarVersion, 3000);
+
 // Instalación como aplicación
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 let promptInstalar = null;

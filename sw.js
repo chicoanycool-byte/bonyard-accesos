@@ -1,5 +1,5 @@
 // Bitácora de Accesos Bonyard - permite instalarla como app y guarda en el celular lo que no cambia
-const CACHE = 'accesos-v1';
+const CACHE = 'accesos-v2';
 const BASE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -29,7 +29,7 @@ self.addEventListener('fetch', e => {
   }
   // La app: primero internet para recibir actualizaciones; si no hay, lo guardado
   e.respondWith(
-    fetch(req).then(res => guardar(req, res))
+    fetch(req, {cache: 'no-store'}).then(res => guardar(req, res))
       .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
   );
 });
