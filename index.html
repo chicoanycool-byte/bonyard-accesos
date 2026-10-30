@@ -125,6 +125,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
     <video id="video" playsinline muted autoplay></video>
     <div class="marco rostro" id="marco"></div>
     <div class="aviso" id="camAviso">Preparando cámara…</div>
+    <button class="btn chico" id="btnManual" style="position:absolute;left:50%;top:14px;transform:translateX(-50%);display:none;padding:10px 18px;font-size:16px">Tomar foto ahora</button>
   </div>
 </section>
 
@@ -270,6 +271,7 @@ async function prenderCamara(){
   const v = $('video');
   v.srcObject = stream;
   await v.play();
+  try { await stream.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]}); } catch(e){}
   await new Promise(r => v.videoWidth ? r() : v.onloadedmetadata = r);
 }
 function apagarCamara(){
@@ -374,55 +376,100 @@ async function capturarRostro(){
 }
 
 /* --------- Captura automática de IDENTIFICACIÓN --------- */
-async function capturarIdentificacion(conRostro = true){
-  camUI('Acerca tu identificación', 'id', 'Muestra el frente de tu identificación (el lado con tu foto) dentro del recuadro');
-  let buenos = 0, intentosOcr = 0;
-  // región del recuadro en proporción del video
-  const R = {x:.07, y:.22, w:.86, h:.56};
-  while (true){
-    if (!stream) throw new Error('cancelado');
-    const c = capturar(1600);
-    if (!c.width){ await pausa(200); continue; }
-    const zona = recortar(c, R.x, R.y, R.w, R.h);
-    const n = nitidez(zona);
-    const b = brillo(zona);
-    let msg = '', ok = false, det = null;
-
-    if (b < 55) msg = 'Hay poca luz';
-    else if (b > 225) msg = 'Hay reflejo, inclina un poco la identificación';
-    else if (n < 90) msg = 'Acércala y mantenla quieta para que se lea bien';
-    else {
-      det = await faceapi.detectAllFaces(zona, new faceapi.SsdMobilenetv1Options({minConfidence:.4}))
-        .withFaceLandmarks().withFaceDescriptors();
-      // la foto de la identificación es pequeña; descartamos el rostro de la persona detrás
-      det = det.filter(d => d.detection.box.width / zona.width < .45);
-      if (conRostro && det.length === 0) msg = 'No vemos la foto de la identificación. Muestra el lado con tu foto';
-      else { ok = true; msg = 'Muy bien, no la muevas'; }
-    }
-
-    if (ok) buenos++; else buenos = 0;
-    $('camBarra').style.width = Math.min(100, buenos * 50) + '%';
-    $('marco').classList.toggle('ok', ok);
-    $('camAviso').textContent = msg;
-
-    if (buenos >= 2){
-      const foto = jpg(zona, .9);
-      $('camAviso').textContent = 'Leyendo tu identificación…';
-      let r;
-      try { r = await api('ocr', {imagen: foto}); } catch(e){ throw e; }
-      if (r.legible){
-        const mejor = det && det.length ? det.sort((a,b)=>b.detection.score-a.detection.score)[0] : null;
-        return { foto, nombre: r.nombre, descriptor: mejor ? mejor.descriptor : null };
-      }
-      intentosOcr++;
-      buenos = 0;
-      $('camAviso').textContent = intentosOcr >= 3
-        ? 'No logramos leerla. Prueba sin funda, más cerca y sin reflejos'
-        : 'No se alcanza a leer. Acércala un poco más';
-      await pausa(1500);
-    }
-    await pausa(150);
+// Mejora la imagen para el lector de texto: escala de grises, más contraste y enfoque suave
+function prepararOcr(canvas){
+  const esc = Math.min(2, 1800 / canvas.width);
+  const c = document.createElement('canvas');
+  c.width = Math.round(canvas.width * esc); c.height = Math.round(canvas.height * esc);
+  const ctx = c.getContext('2d', {willReadFrequently:true});
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, c.width, c.height);
+  const img = ctx.getImageData(0, 0, c.width, c.height), d = img.data;
+  const W = c.width, H = c.height, N = W * H;
+  const g = new Uint8ClampedArray(N), hist = new Uint32Array(256);
+  for (let i = 0; i < N; i++){ g[i] = d[i*4]*.299 + d[i*4+1]*.587 + d[i*4+2]*.114; hist[g[i]]++; }
+  let acc = 0, lo = 0, hi = 255;
+  for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc > N*.02){ lo = v; break; } }
+  acc = 0;
+  for (let v = 255; v >= 0; v--){ acc += hist[v]; if (acc > N*.02){ hi = v; break; } }
+  const k = 255 / Math.max(1, hi - lo);
+  const o = new Float32Array(N);
+  for (let i = 0; i < N; i++) o[i] = Math.max(0, Math.min(255, (g[i] - lo) * k));
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const i = y*W + x;
+    let v = o[i];
+    if (x > 0 && y > 0 && x < W-1 && y < H-1) v = v + .6 * (4*o[i] - o[i-1] - o[i+1] - o[i-W] - o[i+W]);
+    d[i*4] = d[i*4+1] = d[i*4+2] = Math.max(0, Math.min(255, v));
   }
+  ctx.putImageData(img, 0, 0);
+  return c.toDataURL('image/jpeg', .92);
+}
+
+async function capturarIdentificacion(conRostro = true){
+  camUI('Acerca tu identificación', 'id', 'Pon el frente de tu identificación (el lado con tu foto) dentro del recuadro, a unos 20 cm');
+  const R = {x:.07, y:.22, w:.86, h:.56};
+  const inicioT = Date.now();
+  let intentosOcr = 0, mejor = null, ventana = 0, manual = false;
+  const btn = $('btnManual');
+  btn.style.display = 'none';
+  btn.onclick = () => { manual = true; };
+  try {
+    while (true){
+      if (!stream) throw new Error('cancelado');
+      if (Date.now() - inicioT > 8000) btn.style.display = 'block';
+      const c = capturar(1920);
+      if (!c.width){ await pausa(200); continue; }
+      const zona = recortar(c, R.x, R.y, R.w, R.h);
+      const n = nitidez(zona);
+      const b = brillo(zona);
+      let msg = '', ok = false;
+
+      if (b < 50) msg = 'Hay poca luz';
+      else if (b > 230) msg = 'Hay reflejo, inclina un poco la identificación';
+      else if (n < 35) msg = 'Mantenla quieta. Si se ve borrosa, aléjala un poco (unos 20 cm)';
+      else ok = true;
+
+      // Nos quedamos con el cuadro más nítido de un segundo aprox.
+      if (ok){
+        if (!mejor || n > mejor.n) mejor = {zona, n};
+        ventana++;
+        msg = 'Muy bien, no la muevas';
+      } else if (!manual){ ventana = 0; mejor = null; }
+      if (manual && !mejor) mejor = {zona, n};
+
+      $('camBarra').style.width = Math.min(100, ventana * 20) + '%';
+      $('marco').classList.toggle('ok', ok);
+      $('camAviso').textContent = msg;
+
+      if ((ventana >= 5 || manual) && mejor){
+        manual = false;
+        const z = mejor.zona; mejor = null; ventana = 0;
+        let det = [];
+        if (conRostro){
+          $('camAviso').textContent = 'Buscando la foto de tu identificación…';
+          det = await faceapi.detectAllFaces(z, new faceapi.SsdMobilenetv1Options({minConfidence:.3}))
+            .withFaceLandmarks().withFaceDescriptors();
+          det = det.filter(d => d.detection.box.width / z.width < .5);
+          if (!det.length){
+            $('camAviso').textContent = 'No vemos la foto de la identificación. Muestra el lado con tu foto';
+            await pausa(1500);
+            continue;
+          }
+        }
+        $('camAviso').textContent = 'Leyendo tu identificación…';
+        const imgOcr = prepararOcr(z);
+        const r = await api('ocr', {imagen: imgOcr});
+        intentosOcr++;
+        if (r.legible || intentosOcr >= 2){
+          const cara = det.length ? det.sort((a,b)=>b.detection.score-a.detection.score)[0] : null;
+          return { foto: jpg(z, .9), ocr: imgOcr, nombre: r.nombre || '', descriptor: cara ? cara.descriptor : null };
+        }
+        $('camAviso').textContent = 'No se alcanza a leer. Quítale la funda y evita reflejos';
+        await pausa(1500);
+      }
+      await pausa(100);
+    }
+  } finally { btn.style.display = 'none'; }
 }
 
 /* ================== FLUJO DE INGRESO ================== */
@@ -519,7 +566,7 @@ async function iniciarSalida(){
     S.fotoId = id.foto;
     apagarCamara();
     cargando(true, 'Buscando tu registro…');
-    const r = await api('salida_buscar', {imagen: S.fotoId});
+    const r = await api('salida_buscar', {imagen: id.ocr || S.fotoId});
     cargando(false);
     const lista = r.coincidencias.length ? r.coincidencias : r.todos;
     if (!lista.length) return resultado('rojoFondo','⚠','Sin registro de entrada','No encontramos visitas abiertas. Acude con vigilancia.', 8000);
