@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0f3d5e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Bitácora de Accesos</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
+<style>
+:root{--azul:#0f3d5e;--azul2:#16507a;--verde:#1f8a4c;--rojo:#c0392b;--gris:#f2f4f7;--txt:#14202b;--sub:#5b6b7a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--gris);font-family:Inter,system-ui,sans-serif;color:var(--txt);overflow:hidden;user-select:none}
+.pantalla{position:fixed;inset:0;display:none;flex-direction:column;padding:20px 16px;gap:16px}
+.pantalla.activa{display:flex}
+header{display:flex;align-items:center;gap:12px}
+.logo{font-weight:800;font-size:22px;color:var(--azul);letter-spacing:.5px}
+.reloj{margin-left:auto;font-size:15px;color:var(--sub);text-align:right}
+h1{font-size:28px;font-weight:800;line-height:1.15}
+h2{font-size:22px;font-weight:800}
+p.sub{color:var(--sub);font-size:16px}
+.grid{display:grid;gap:14px;flex:1}
+.g2{grid-template-columns:1fr}
+.g4{grid-template-columns:1fr 1fr}
+.btn{border:0;border-radius:18px;font:inherit;font-weight:800;color:#fff;background:var(--azul);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px;font-size:22px;box-shadow:0 4px 14px rgba(15,61,94,.18);cursor:pointer}
+.btn:active{transform:scale(.98)}
+.btn .ico{font-size:44px}
+.btn.verde{background:var(--verde)}
+.btn.naranja{background:#d9822b}
+.btn.sec{background:#fff;color:var(--azul);box-shadow:none;border:2px solid #d5dde5;font-size:18px;padding:14px}
+.btn.chico{font-size:18px;padding:14px}
+.volver{align-self:flex-start;background:none;border:0;font:inherit;color:var(--azul);font-weight:600;font-size:17px;padding:6px 0}
+.camara{position:relative;flex:1;border-radius:22px;overflow:hidden;background:#000}
+.camara video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.marco{position:absolute;border:4px dashed rgba(255,255,255,.75);pointer-events:none}
+.marco.rostro{left:50%;top:46%;width:62%;aspect-ratio:3/4;transform:translate(-50%,-50%);border-radius:50%}
+.marco.id{left:50%;top:50%;width:86%;aspect-ratio:1.586;transform:translate(-50%,-50%);border-radius:14px}
+.marco.ok{border-color:#3ee07f;border-style:solid}
+.aviso{position:absolute;left:12px;right:12px;bottom:14px;background:rgba(0,0,0,.65);color:#fff;font-weight:600;font-size:18px;text-align:center;border-radius:14px;padding:12px}
+.barra{height:8px;border-radius:8px;background:#dfe5ea;overflow:hidden}
+.barra i{display:block;height:100%;width:0;background:var(--verde);transition:width .2s}
+.lista{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-bottom:8px}
+.item{background:#fff;border-radius:14px;padding:16px;border:2px solid transparent;display:flex;flex-direction:column;gap:2px;cursor:pointer}
+.item b{font-size:18px}
+.item span{color:var(--sub);font-size:15px}
+.item.sel{border-color:var(--azul);background:#eaf2f8}
+input[type=text],input[type=search],input[type=password]{width:100%;font:inherit;font-size:20px;padding:14px;border-radius:14px;border:2px solid #d5dde5;background:#fff;text-transform:uppercase}
+input[type=password],input.normal{text-transform:none}
+label.l{font-weight:600;color:var(--sub);font-size:15px}
+.resultado{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:18px;color:#fff;border-radius:24px;padding:24px}
+.resultado .grande{font-size:120px;line-height:1}
+.resultado h1{font-size:38px}
+.resultado p{font-size:20px;opacity:.95}
+.verdeFondo{background:var(--verde)}
+.rojoFondo{background:var(--rojo)}
+.azulFondo{background:var(--azul)}
+.carga{position:fixed;inset:0;background:rgba(242,244,247,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:20;font-size:20px;font-weight:600;text-align:center;padding:24px}
+.carga.on{display:flex}
+.spin{width:56px;height:56px;border:6px solid #cfd8e0;border-top-color:var(--azul);border-radius:50%;animation:g 1s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+.privacidad{flex:1;overflow:auto;background:#fff;border-radius:16px;padding:18px;font-size:16px;line-height:1.5;color:#2b3a47}
+.privacidad b{color:var(--txt)}
+.fila{display:flex;gap:12px}
+.fila .btn{flex:1}
+.fotos{display:flex;gap:12px;justify-content:center}
+.fotos img{width:42%;border-radius:14px;border:3px solid rgba(255,255,255,.6)}
+.cfg{display:flex;flex-direction:column;gap:10px;overflow:auto}
+.nota{font-size:14px;color:var(--sub)}
+@media(min-width:700px){.g2{grid-template-columns:1fr 1fr}.pantalla{padding:28px 32px}}
+</style>
+</head>
+<body>
+
+<!-- 1. INICIO -->
+<section class="pantalla activa" id="p-inicio">
+  <header><div class="logo" id="logo">BONYARD</div><div class="reloj" id="reloj"></div></header>
+  <div>
+    <h1>Bienvenido</h1>
+    <p class="sub">Registra tu entrada o tu salida</p>
+  </div>
+  <div class="grid g2">
+    <button class="btn verde" onclick="iniciarIngreso()"><span class="ico">➜</span>INGRESO</button>
+    <button class="btn naranja" onclick="iniciarSalida()"><span class="ico">⇠</span>SALIDA</button>
+  </div>
+</section>
+
+<!-- 2. TIPO -->
+<section class="pantalla" id="p-tipo">
+  <button class="volver" onclick="inicio()">‹ Regresar</button>
+  <h1>¿Quién nos visita?</h1>
+  <div class="grid g4">
+    <button class="btn" onclick="elegirTipo('Cliente')"><span class="ico">🤝</span>Cliente</button>
+    <button class="btn" onclick="elegirTipo('Proveedor')"><span class="ico">📦</span>Proveedor</button>
+    <button class="btn" onclick="elegirTipo('Transporte')"><span class="ico">🚚</span>Transporte</button>
+    <button class="btn" onclick="elegirTipo('Visitante')"><span class="ico">👤</span>Visitante</button>
+  </div>
+</section>
+
+<!-- 3. AVISO DE PRIVACIDAD -->
+<section class="pantalla" id="p-privacidad">
+  <button class="volver" onclick="ir('p-tipo')">‹ Regresar</button>
+  <h2>Antes de continuar</h2>
+  <div class="privacidad">
+    <p><b>Aviso de privacidad simplificado</b></p><br>
+    <p><b>Bonyard Servicios SC</b> va a tomar una fotografía de tu rostro y de tu identificación oficial, y registrará tu nombre, la persona que visitas y tus horarios de entrada y salida.</p><br>
+    <p>Usamos estos datos únicamente para controlar el acceso y la seguridad de nuestras instalaciones. No se comparten con terceros salvo requerimiento de autoridad.</p><br>
+    <p>La fotografía de tu rostro se compara con la de tu identificación para confirmar que eres tú. Si no estás de acuerdo, acude con el personal de recepción para registrarte de otra forma.</p><br>
+    <p>Puedes consultar el aviso de privacidad integral y ejercer tus derechos ARCO solicitándolo en recepción.</p>
+  </div>
+  <div class="fila">
+    <button class="btn sec" onclick="inicio()">No acepto</button>
+    <button class="btn verde chico" onclick="pasoRostro()">Acepto</button>
+  </div>
+</section>
+
+<!-- 4. CÁMARA -->
+<section class="pantalla" id="p-camara">
+  <button class="volver" onclick="cancelarCamara()">‹ Cancelar</button>
+  <h2 id="camTitulo">Mira a la cámara</h2>
+  <div class="barra"><i id="camBarra"></i></div>
+  <div class="camara">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="marco rostro" id="marco"></div>
+    <div class="aviso" id="camAviso">Preparando cámara…</div>
+  </div>
+</section>
+
+<!-- 5. CONFIRMAR NOMBRE -->
+<section class="pantalla" id="p-nombre">
+  <h2>Confirma tu nombre</h2>
+  <p class="sub">Lo leímos de tu identificación. Corrígelo si hace falta.</p>
+  <input type="text" id="nombre" autocomplete="off" autocapitalize="characters">
+  <div style="flex:1"></div>
+  <button class="btn verde chico" onclick="confirmarNombre()">Continuar</button>
+</section>
+
+<!-- 6. ANFITRIÓN -->
+<section class="pantalla" id="p-anfitrion">
+  <h2>¿A quién visitas?</h2>
+  <input type="search" id="buscar" placeholder="Buscar por nombre o puesto" class="normal" oninput="pintarAnfitriones()">
+  <div class="lista" id="listaAnf"></div>
+  <button class="btn verde chico" id="btnRegistrar" onclick="registrarIngreso()" disabled style="opacity:.5">Registrar entrada</button>
+</section>
+
+<!-- 7. SALIDA: ELEGIR REGISTRO -->
+<section class="pantalla" id="p-salidaLista">
+  <button class="volver" onclick="inicio()">‹ Cancelar</button>
+  <h2 id="salTitulo">Confirma tu registro</h2>
+  <p class="sub" id="salSub"></p>
+  <div class="lista" id="listaSal"></div>
+  <button class="btn naranja chico" id="btnSalida" onclick="registrarSalida()" disabled style="opacity:.5">Registrar salida</button>
+</section>
+
+<!-- 8. RESULTADO -->
+<section class="pantalla" id="p-resultado">
+  <div class="resultado" id="res"></div>
+</section>
+
+<!-- 9. CONFIGURACIÓN (tocar el logo 5 veces) -->
+<section class="pantalla" id="p-config">
+  <button class="volver" onclick="inicio()">‹ Salir</button>
+  <h2>Configuración</h2>
+  <div class="cfg">
+    <label class="l">URL del backend (Apps Script)</label>
+    <input type="text" id="cfgUrl" class="normal" placeholder="https://script.google.com/macros/s/.../exec">
+    <label class="l">Token (hoja Config)</label>
+    <input type="text" id="cfgToken" class="normal">
+    <label class="l">PIN de configuración (opcional)</label>
+    <input type="password" id="cfgPin" inputmode="numeric">
+    <label class="l">Sensibilidad de comparación de rostros: <span id="umbralTxt"></span></label>
+    <input type="range" id="cfgUmbral" min="0.40" max="0.65" step="0.01" oninput="umbralTxt.textContent=this.value">
+    <p class="nota">Más bajo = más estricto (más rechazos). Recomendado 0.55. Si rechaza a gente legítima con INE vieja, súbelo a 0.58–0.60.</p>
+    <button class="btn verde chico" onclick="guardarConfig()">Guardar y probar</button>
+  </div>
+</section>
+
+<div class="carga" id="carga"><div class="spin"></div><div id="cargaTxt">Procesando…</div></div>
+
+<script>
+/* ================== ESTADO Y CONFIG ================== */
+const MODELOS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+const $ = id => document.getElementById(id);
+const cfg = {
+  get url(){ return localStorage.getItem('by_url') || '' },
+  get token(){ return localStorage.getItem('by_token') || '' },
+  get pin(){ return localStorage.getItem('by_pin') || '' },
+  get umbral(){ return parseFloat(localStorage.getItem('by_umbral') || '0.55') }
+};
+let S = {};            // datos del registro en curso
+let anfitriones = [];
+let stream = null, loop = null, modelosListos = null, timerInicio = null;
+
+/* ================== NAVEGACIÓN ================== */
+function ir(id){
+  document.querySelectorAll('.pantalla').forEach(p => p.classList.remove('activa'));
+  $(id).classList.add('activa');
+  clearTimeout(timerInicio);
+  if (!['p-inicio','p-config','p-resultado'].includes(id)) timerInicio = setTimeout(inicio, 180000); // 3 min sin uso → inicio
+}
+function inicio(){ apagarCamara(); S = {}; ir('p-inicio'); }
+function cargando(on, txt){ $('carga').classList.toggle('on', on); if (txt) $('cargaTxt').textContent = txt; }
+
+setInterval(() => {
+  const d = new Date();
+  $('reloj').innerHTML = d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}) + '<br><b>' + d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) + '</b>';
+}, 1000);
+
+// 5 toques al logo abren configuración
+let toques = 0, tToques;
+$('logo').addEventListener('click', () => {
+  toques++; clearTimeout(tToques); tToques = setTimeout(() => toques = 0, 1500);
+  if (toques >= 5){
+    toques = 0;
+    if (cfg.pin && prompt('PIN de configuración') !== cfg.pin) return;
+    $('cfgUrl').value = cfg.url; $('cfgToken').value = cfg.token; $('cfgPin').value = cfg.pin;
+    $('cfgUmbral').value = cfg.umbral; $('umbralTxt').textContent = cfg.umbral;
+    ir('p-config');
+  }
+});
+
+async function guardarConfig(){
+  localStorage.setItem('by_url', $('cfgUrl').value.trim());
+  localStorage.setItem('by_token', $('cfgToken').value.trim());
+  localStorage.setItem('by_pin', $('cfgPin').value.trim());
+  localStorage.setItem('by_umbral', $('cfgUmbral').value);
+  cargando(true, 'Probando conexión…');
+  try {
+    const r = await api('anfitriones');
+    alert('Conexión correcta. Anfitriones activos: ' + r.lista.length);
+    inicio();
+  } catch(e){ alert('No se pudo conectar: ' + e.message); }
+  cargando(false);
+}
+
+/* ================== BACKEND ================== */
+async function api(action, datos = {}){
+  if (!cfg.url) throw new Error('Falta configurar la app (toca 5 veces el logo).');
+  const r = await fetch(cfg.url, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({action, token: cfg.token}, datos))
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Error del servidor');
+  return j;
+}
+
+/* ================== MODELOS DE ROSTRO ================== */
+function cargarModelos(){
+  if (!modelosListos){
+    modelosListos = Promise.all([
+      faceapi.nets.ssdMobilenetv1.loadFromUri(MODELOS),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODELOS),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODELOS)
+    ]);
+  }
+  return modelosListos;
+}
+cargarModelos().catch(()=>{ modelosListos = null; });
+
+/* ================== CÁMARA ================== */
+async function prenderCamara(){
+  if (stream) return;
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
+  });
+  const v = $('video');
+  v.srcObject = stream;
+  await v.play();
+  await new Promise(r => v.videoWidth ? r() : v.onloadedmetadata = r);
+}
+function apagarCamara(){
+  cancelAnimationFrame(loop); loop = null;
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+function cancelarCamara(){ inicio(); }
+
+// Captura el cuadro actual sin efecto espejo, reducido para enviarlo
+function capturar(maxLado = 1280){
+  const v = $('video');
+  const esc = Math.min(1, maxLado / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(v.videoWidth * esc); c.height = Math.round(v.videoHeight * esc);
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  return c;
+}
+// Recorte de una región (en proporciones del video)
+function recortar(canvas, x, y, w, h){
+  const c = document.createElement('canvas');
+  c.width = Math.round(canvas.width * w); c.height = Math.round(canvas.height * h);
+  c.getContext('2d').drawImage(canvas, canvas.width * x, canvas.height * y, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+// Nitidez: varianza del Laplaciano sobre escala de grises
+function nitidez(canvas, region){
+  const tam = 240;
+  const c = document.createElement('canvas');
+  const r = region || {x:0,y:0,w:canvas.width,h:canvas.height};
+  const esc = tam / Math.max(r.w, r.h);
+  c.width = Math.max(8, Math.round(r.w * esc)); c.height = Math.max(8, Math.round(r.h * esc));
+  const ctx = c.getContext('2d', {willReadFrequently:true});
+  ctx.drawImage(canvas, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  const W = c.width, H = c.height, g = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) g[i] = d[i*4]*.299 + d[i*4+1]*.587 + d[i*4+2]*.114;
+  let s = 0, s2 = 0, n = 0;
+  for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++){
+    const i = y*W + x;
+    const l = 4*g[i] - g[i-1] - g[i+1] - g[i-W] - g[i+W];
+    s += l; s2 += l*l; n++;
+  }
+  const m = s / n;
+  return s2 / n - m * m;
+}
+function brillo(canvas){
+  const c = document.createElement('canvas'); c.width = 64; c.height = 36;
+  const ctx = c.getContext('2d'); ctx.drawImage(canvas, 0, 0, 64, 36);
+  const d = ctx.getImageData(0,0,64,36).data; let s = 0;
+  for (let i = 0; i < d.length; i += 4) s += (d[i]+d[i+1]+d[i+2])/3;
+  return s / (d.length/4);
+}
+const jpg = (c, q = .85) => c.toDataURL('image/jpeg', q);
+const pausa = ms => new Promise(r => setTimeout(r, ms));
+
+function camUI(titulo, tipoMarco, aviso){
+  $('camTitulo').textContent = titulo;
+  $('marco').className = 'marco ' + tipoMarco;
+  $('camAviso').textContent = aviso;
+  $('camBarra').style.width = '0%';
+}
+
+/* --------- Captura automática de ROSTRO --------- */
+async function capturarRostro(){
+  camUI('Mira de frente a la cámara', 'rostro', 'Coloca tu cara dentro del óvalo');
+  const inicioT = Date.now();
+  let buenos = 0;
+  while (true){
+    if (!stream) throw new Error('cancelado');
+    const c = capturar(960);
+    const det = await faceapi.detectAllFaces(c, new faceapi.SsdMobilenetv1Options({minConfidence:.6}))
+      .withFaceLandmarks().withFaceDescriptors();
+    let msg = '', ok = false;
+    const b = brillo(c);
+    if (b < 60) msg = 'Hay poca luz, acércate a una zona iluminada';
+    else if (det.length === 0) msg = Date.now() - inicioT > 8000 ? 'Se debe tomar foto de tu rostro. Quítate gorra o lentes oscuros' : 'No vemos tu rostro. Colócate dentro del óvalo';
+    else if (det.length > 1) msg = 'Solo debe aparecer una persona';
+    else {
+      const bx = det[0].detection.box;
+      const rel = bx.width / c.width;
+      const cx = (bx.x + bx.width/2) / c.width;
+      const n = nitidez(c, bx);
+      if (rel < .22) msg = 'Acércate un poco más';
+      else if (rel > .7) msg = 'Aléjate un poco';
+      else if (Math.abs(cx - .5) > .15) msg = 'Céntrate en el óvalo';
+      else if (det[0].detection.score < .85) msg = 'Mira de frente, sin taparte la cara';
+      else if (n < 60) msg = 'Quédate quieto…';
+      else { ok = true; msg = 'Perfecto, no te muevas'; }
+      if (ok && ++buenos >= 3){
+        $('camBarra').style.width = '100%';
+        return { foto: jpg(capturar(1024)), descriptor: det[0].descriptor };
+      }
+    }
+    if (!ok) buenos = 0;
+    $('camBarra').style.width = (buenos * 33) + '%';
+    $('marco').classList.toggle('ok', ok);
+    $('camAviso').textContent = msg;
+    await pausa(120);
+  }
+}
+
+/* --------- Captura automática de IDENTIFICACIÓN --------- */
+async function capturarIdentificacion(conRostro = true){
+  camUI('Acerca tu identificación', 'id', 'Muestra el frente de tu identificación (el lado con tu foto) dentro del recuadro');
+  let buenos = 0, intentosOcr = 0;
+  // región del recuadro en proporción del video
+  const R = {x:.07, y:.22, w:.86, h:.56};
+  while (true){
+    if (!stream) throw new Error('cancelado');
+    const c = capturar(1600);
+    const zona = recortar(c, R.x, R.y, R.w, R.h);
+    const n = nitidez(zona);
+    const b = brillo(zona);
+    let msg = '', ok = false, det = null;
+
+    if (b < 55) msg = 'Hay poca luz';
+    else if (b > 225) msg = 'Hay reflejo, inclina un poco la identificación';
+    else if (n < 90) msg = 'Acércala y mantenla quieta para que se lea bien';
+    else {
+      det = await faceapi.detectAllFaces(zona, new faceapi.SsdMobilenetv1Options({minConfidence:.4}))
+        .withFaceLandmarks().withFaceDescriptors();
+      // la foto de la identificación es pequeña; descartamos el rostro de la persona detrás
+      det = det.filter(d => d.detection.box.width / zona.width < .45);
+      if (conRostro && det.length === 0) msg = 'No vemos la foto de la identificación. Muestra el lado con tu foto';
+      else { ok = true; msg = 'Muy bien, no la muevas'; }
+    }
+
+    if (ok) buenos++; else buenos = 0;
+    $('camBarra').style.width = Math.min(100, buenos * 50) + '%';
+    $('marco').classList.toggle('ok', ok);
+    $('camAviso').textContent = msg;
+
+    if (buenos >= 2){
+      const foto = jpg(zona, .9);
+      $('camAviso').textContent = 'Leyendo tu identificación…';
+      let r;
+      try { r = await api('ocr', {imagen: foto}); } catch(e){ throw e; }
+      if (r.legible){
+        const mejor = det && det.length ? det.sort((a,b)=>b.detection.score-a.detection.score)[0] : null;
+        return { foto, nombre: r.nombre, descriptor: mejor ? mejor.descriptor : null };
+      }
+      intentosOcr++;
+      buenos = 0;
+      $('camAviso').textContent = intentosOcr >= 3
+        ? 'No logramos leerla. Prueba sin funda, más cerca y sin reflejos'
+        : 'No se alcanza a leer. Acércala un poco más';
+      await pausa(1500);
+    }
+    await pausa(150);
+  }
+}
+
+/* ================== FLUJO DE INGRESO ================== */
+function iniciarIngreso(){ S = {modo:'ingreso'}; ir('p-tipo'); }
+function elegirTipo(t){ S.tipo = t; ir('p-privacidad'); }
+
+async function pasoRostro(){
+  try {
+    ir('p-camara'); $('camAviso').textContent = 'Preparando cámara…';
+    await Promise.all([prenderCamara(), cargarModelos()]);
+    const rostro = await capturarRostro();
+    S.fotoRostro = rostro.foto; S.descRostro = rostro.descriptor;
+
+    $('camAviso').textContent = '¡Listo! Ahora tu identificación';
+    await pausa(1200);
+    const id = await capturarIdentificacion(true);
+    S.fotoId = id.foto; S.nombre = id.nombre;
+    apagarCamara();
+
+    // Comparación de rostros
+    const dist = faceapi.euclideanDistance(S.descRostro, id.descriptor);
+    S.distancia = dist;
+    if (dist > cfg.umbral){
+      cargando(true, 'Registrando…');
+      try { await api('rechazo', {tipo:S.tipo, nombre:S.nombre, distancia:dist, fotoRostro:S.fotoRostro, fotoId:S.fotoId}); } catch(e){}
+      cargando(false);
+      return resultado('rojoFondo', '✕', 'No coinciden rostros',
+        'Tu rostro no coincide con la foto de tu identificación.<br>Acceso no permitido. Acude con el personal de vigilancia.', 10000);
+    }
+    $('nombre').value = S.nombre || '';
+    ir('p-nombre');
+  } catch(e){
+    apagarCamara();
+    if (e.message === 'cancelado') return;
+    if (e.name === 'NotAllowedError') return resultado('rojoFondo','⚠','Sin acceso a la cámara','Permite el uso de la cámara en el navegador para continuar.', 8000);
+    resultado('rojoFondo','⚠','Algo salió mal', e.message, 8000);
+  }
+}
+
+function confirmarNombre(){
+  const n = $('nombre').value.trim().toUpperCase().replace(/\s+/g,' ');
+  if (n.split(' ').length < 2){ alert('Escribe tu nombre completo'); return; }
+  S.nombre = n;
+  abrirAnfitriones();
+}
+
+async function abrirAnfitriones(){
+  cargando(true, 'Cargando directorio…');
+  try {
+    anfitriones = (await api('anfitriones')).lista;
+    S.anfitrionId = null;
+    $('buscar').value = '';
+    pintarAnfitriones();
+    ir('p-anfitrion');
+  } catch(e){ resultado('rojoFondo','⚠','Sin conexión', e.message, 8000); }
+  cargando(false);
+}
+
+function pintarAnfitriones(){
+  const q = $('buscar').value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const lista = anfitriones.filter(a => !q || norm(a.nombre + ' ' + a.puesto).includes(q));
+  $('listaAnf').innerHTML = lista.map(a =>
+    `<div class="item ${a.id===S.anfitrionId?'sel':''}" onclick="elegirAnfitrion(${a.id})"><b>${esc(a.nombre)}</b><span>${esc(a.puesto)}</span></div>`
+  ).join('') || '<p class="sub">Sin resultados</p>';
+  const b = $('btnRegistrar'); b.disabled = !S.anfitrionId; b.style.opacity = S.anfitrionId ? 1 : .5;
+}
+function elegirAnfitrion(id){ S.anfitrionId = id; pintarAnfitriones(); }
+
+async function registrarIngreso(){
+  if (!S.anfitrionId) return;
+  cargando(true, 'Registrando tu entrada…');
+  try {
+    const r = await api('ingreso', {
+      tipo: S.tipo, nombre: S.nombre, anfitrionId: S.anfitrionId,
+      distancia: S.distancia, fotoRostro: S.fotoRostro, fotoId: S.fotoId
+    });
+    cargando(false);
+    resultado('verdeFondo', '✓', 'Acceso permitido',
+      `Bienvenido, <b>${esc(primerNombre(S.nombre))}</b>.<br>Ya avisamos a ${esc(r.anfitrion)} que llegaste.<br><br><small>Folio ${esc(r.folio)}</small>`, 7000);
+  } catch(e){
+    cargando(false);
+    resultado('rojoFondo','⚠','No se pudo registrar', e.message, 8000);
+  }
+}
+
+/* ================== FLUJO DE SALIDA ================== */
+async function iniciarSalida(){
+  S = {modo:'salida'};
+  try {
+    ir('p-camara'); $('camAviso').textContent = 'Preparando cámara…';
+    await Promise.all([prenderCamara(), cargarModelos()]);
+    const id = await capturarIdentificacion(false);
+    S.fotoId = id.foto;
+    apagarCamara();
+    cargando(true, 'Buscando tu registro…');
+    const r = await api('salida_buscar', {imagen: S.fotoId});
+    cargando(false);
+    const lista = r.coincidencias.length ? r.coincidencias : r.todos;
+    if (!lista.length) return resultado('rojoFondo','⚠','Sin registro de entrada','No encontramos visitas abiertas. Acude con vigilancia.', 8000);
+    S.folio = r.coincidencias.length === 1 ? r.coincidencias[0].folio : null;
+    $('salTitulo').textContent = r.coincidencias.length ? 'Confirma tu registro' : 'Selecciona tu registro';
+    $('salSub').textContent = r.coincidencias.length ? '' : 'No logramos identificarte automáticamente. Búscate en la lista.';
+    S.listaSal = lista;
+    pintarSalidas();
+    ir('p-salidaLista');
+  } catch(e){
+    apagarCamara(); cargando(false);
+    if (e.message === 'cancelado') return;
+    resultado('rojoFondo','⚠','Algo salió mal', e.message, 8000);
+  }
+}
+function pintarSalidas(){
+  $('listaSal').innerHTML = S.listaSal.map(a =>
+    `<div class="item ${a.folio===S.folio?'sel':''}" onclick="S.folio='${esc(a.folio)}';pintarSalidas()"><b>${esc(a.nombre)}</b><span>Visitó a ${esc(a.anfitrion)} · entró ${esc(a.fecha)} ${esc(a.hora)}</span></div>`
+  ).join('');
+  const b = $('btnSalida'); b.disabled = !S.folio; b.style.opacity = S.folio ? 1 : .5;
+}
+async function registrarSalida(){
+  if (!S.folio) return;
+  cargando(true, 'Registrando tu salida…');
+  try {
+    const r = await api('salida_cerrar', {folio: S.folio, imagen: S.fotoId});
+    cargando(false);
+    resultado('azulFondo', '👋', 'Bonyard agradece tu visita',
+      `Hasta pronto, <b>${esc(primerNombre(r.nombre))}</b>.<br>Salida registrada a las ${esc(r.hora)} hrs.`, 6000);
+  } catch(e){
+    cargando(false);
+    resultado('rojoFondo','⚠','No se pudo registrar', e.message, 8000);
+  }
+}
+
+/* ================== RESULTADO ================== */
+function resultado(clase, ico, titulo, texto, ms){
+  $('res').className = 'resultado ' + clase;
+  $('res').innerHTML = `<div class="grande">${ico}</div><h1>${titulo}</h1><p>${texto}</p>`;
+  ir('p-resultado');
+  timerInicio = setTimeout(inicio, ms || 6000);
+}
+
+function primerNombre(n){ const p = String(n||'').trim().split(/\s+/)[0] || ''; return p.charAt(0) + p.slice(1).toLowerCase(); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Mantener pantalla encendida (kiosco)
+async function despierto(){ try { await navigator.wakeLock.request('screen'); } catch(e){} }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') despierto(); });
+despierto();
+// Liga de instalación: index.html#u=URL&t=TOKEN guarda la configuración y limpia la dirección
+(function(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('u') && h.get('t')){
+    localStorage.setItem('by_url', h.get('u'));
+    localStorage.setItem('by_token', h.get('t'));
+    history.replaceState(null, '', location.pathname);
+    setTimeout(() => alert('App configurada. Ya puedes agregarla a la pantalla de inicio.'), 400);
+  }
+})();
+if (!cfg.url) setTimeout(() => alert('Primera vez: toca 5 veces la palabra BONYARD para configurar la app.'), 600);
+</script>
+</body>
+</html>
