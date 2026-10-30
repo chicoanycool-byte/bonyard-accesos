@@ -173,7 +173,7 @@ label.l{font-weight:600;color:var(--sub);font-size:15px}
     <input type="password" id="cfgPin" inputmode="numeric">
     <label class="l">Sensibilidad de comparación de rostros: <span id="umbralTxt"></span></label>
     <input type="range" id="cfgUmbral" min="0.40" max="0.65" step="0.01" oninput="umbralTxt.textContent=this.value">
-    <p class="nota">Más bajo = más estricto (más rechazos). Recomendado 0.55. Si rechaza a gente legítima con INE vieja, súbelo a 0.58–0.60.</p>
+    <p class="nota">Más bajo = más estricto (más rechazos). Recomendado 0.60. Si rechaza a gente legítima (barba, lentes, INE vieja), súbelo a 0.62–0.65.</p>
     <button class="btn verde chico" onclick="guardarConfig()">Guardar y probar</button>
   </div>
 </section>
@@ -188,7 +188,7 @@ const cfg = {
   get url(){ return localStorage.getItem('by_url') || '' },
   get token(){ return localStorage.getItem('by_token') || '' },
   get pin(){ return localStorage.getItem('by_pin') || '' },
-  get umbral(){ return parseFloat(localStorage.getItem('by_umbral') || '0.55') }
+  get umbral(){ return parseFloat(localStorage.getItem('by_umbral') || '0.60') }
 };
 let S = {};            // datos del registro en curso
 let anfitriones = [];
@@ -336,10 +336,11 @@ function camUI(titulo, tipoMarco, aviso){
 }
 
 /* --------- Captura automática de ROSTRO --------- */
-async function capturarRostro(){
-  camUI('Mira de frente a la cámara', 'rostro', 'Coloca tu cara dentro del óvalo');
+async function capturarRostro(titulo){
+  camUI(titulo || 'Mira de frente a la cámara', 'rostro', 'Coloca tu cara dentro del óvalo');
   const inicioT = Date.now();
   let buenos = 0;
+  const descs = [];
   while (true){
     if (!stream) throw new Error('cancelado');
     const c = capturar(960);
@@ -362,9 +363,10 @@ async function capturarRostro(){
       else if (det[0].detection.score < .85) msg = 'Mira de frente, sin taparte la cara';
       else if (n < 60) msg = 'Quédate quieto…';
       else { ok = true; msg = 'Perfecto, no te muevas'; }
+      if (ok) descs.push(det[0].descriptor);
       if (ok && ++buenos >= 3){
         $('camBarra').style.width = '100%';
-        return { foto: jpg(capturar(1024)), descriptor: det[0].descriptor };
+        return { foto: jpg(capturar(1024)), descriptor: det[0].descriptor, descs: descs.slice(-3) };
       }
     }
     if (!ok) buenos = 0;
@@ -403,6 +405,22 @@ function prepararOcr(canvas){
   }
   ctx.putImageData(img, 0, 0);
   return c.toDataURL('image/jpeg', .92);
+}
+
+// La foto de la identificación es pequeña: la recortamos con margen y la ampliamos para comparar mejor
+async function descriptorAmpliado(canvas, box){
+  try {
+    const m = box.width * .6;
+    const x = Math.max(0, box.x - m), y = Math.max(0, box.y - m);
+    const w = Math.min(canvas.width - x, box.width + 2*m), h = Math.min(canvas.height - y, box.height + 2*m);
+    const esc = 400 / w;
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * esc); c.height = Math.round(h * esc);
+    const ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, x, y, w, h, 0, 0, c.width, c.height);
+    const d = await faceapi.detectSingleFace(c, new faceapi.SsdMobilenetv1Options({minConfidence:.3})).withFaceLandmarks().withFaceDescriptor();
+    return d ? d.descriptor : null;
+  } catch(e){ return null; }
 }
 
 async function capturarIdentificacion(conRostro = true){
@@ -462,7 +480,9 @@ async function capturarIdentificacion(conRostro = true){
         intentosOcr++;
         if (r.legible || intentosOcr >= 2){
           const cara = det.length ? det.sort((a,b)=>b.detection.score-a.detection.score)[0] : null;
-          return { foto: jpg(z, .9), ocr: imgOcr, nombre: r.nombre || '', descriptor: cara ? cara.descriptor : null };
+          const descs = cara ? [cara.descriptor] : [];
+          if (cara){ const extra = await descriptorAmpliado(z, cara.detection.box); if (extra) descs.push(extra); }
+          return { foto: jpg(z, .9), ocr: imgOcr, nombre: r.nombre || '', descriptor: cara ? cara.descriptor : null, descs };
         }
         $('camAviso').textContent = 'No se alcanza a leer. Quítale la funda y evita reflejos';
         await pausa(1500);
@@ -490,7 +510,20 @@ async function pasoRostro(){
     apagarCamara();
 
     // Comparación de rostros
-    const dist = faceapi.euclideanDistance(S.descRostro, id.descriptor);
+    // Tomamos la menor distancia entre varias tomas del rostro y de la identificación
+    const distMin = (vivos, ids) => Math.min(...vivos.flatMap(a => ids.map(b => faceapi.euclideanDistance(a, b))));
+    const idDescs = id.descs && id.descs.length ? id.descs : [id.descriptor];
+    let dist = distMin(rostro.descs && rostro.descs.length ? rostro.descs : [S.descRostro], idDescs);
+    if (dist > cfg.umbral){
+      // Segundo intento con otra toma del rostro antes de rechazar
+      await prenderCamara();
+      $('camAviso').textContent = 'Vamos a intentarlo otra vez';
+      await pausa(800);
+      const otro = await capturarRostro('Mira de frente, sin lentes ni gorra');
+      apagarCamara();
+      const d2 = distMin(otro.descs && otro.descs.length ? otro.descs : [otro.descriptor], idDescs);
+      if (d2 < dist){ dist = d2; S.fotoRostro = otro.foto; }
+    }
     S.distancia = dist;
     if (dist > cfg.umbral){
       cargando(true, 'Registrando…');
